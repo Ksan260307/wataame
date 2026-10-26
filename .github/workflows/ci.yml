@@ -1,0 +1,207 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  BLENDER_VERSION: 5.2.3
+
+jobs:
+  # Unity のライセンスが Secrets に登録されているか (フォークからの PR などでは無い)
+  secrets-check:
+    name: Check secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has-license: ${{ steps.check.outputs.has-license }}
+    steps:
+      - id: check
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -n "$UNITY_LICENSE" ]; then
+            echo "has-license=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-license=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::UNITY_LICENSE が未設定のため Unity のテスト/ビルドをスキップします (README の「CI/CD の設定」を参照)"
+          fi
+
+  models:
+    name: Blender models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Blender
+        id: cache-blender
+        uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER_VERSION }}-linux-x64
+
+      - name: Download Blender
+        if: steps.cache-blender.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/blender
+          curl -fsSL "https://download.blender.org/release/Blender${BLENDER_VERSION%.*}/blender-${BLENDER_VERSION}-linux-x64.tar.xz" \
+            | tar -xJ --strip-components=1 -C ~/blender
+
+      - name: Install runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 libgl1 libegl1
+
+      - name: Generate models
+        run: |
+          ~/blender/blender -b --factory-startup --python Blender/generate_models.py -- --out Assets/Resources/Models
+          test -s Assets/Resources/Models/WataameMachine.fbx
+          test -s Assets/Resources/Models/Stick.fbx
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Models
+          path: Assets/Resources/Models/*.fbx
+          if-no-files-found: error
+
+  test:
+    name: Unity EditMode tests
+    needs: secrets-check
+    if: needs.secrets-check.outputs.has-license == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-test-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-test-
+
+      - uses: game-ci/unity-test-runner@v4
+        id: tests
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: EditMode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: EditMode Test Results
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TestResults
+          path: ${{ steps.tests.outputs.artifactsPath }}
+
+  build:
+    name: Build ${{ matrix.targetPlatform }}
+    needs: [secrets-check, models, test]
+    if: needs.secrets-check.outputs.has-license == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform: [WebGL, StandaloneWindows64]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # バージョン番号をタグから決めるため
+
+      # Blender ジョブで作り直したモデルでビルドする
+      - uses: actions/download-artifact@v4
+        with:
+          name: Models
+          path: Assets/Resources/Models
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-${{ matrix.targetPlatform }}-
+
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: ${{ matrix.targetPlatform }}
+          buildName: Wataame
+          buildMethod: Wataame.Editor.BuildScript.Build
+          versioning: Semantic
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Build-${{ matrix.targetPlatform }}
+          path: build/${{ matrix.targetPlatform }}
+          if-no-files-found: error
+
+  # main へのプッシュで WebGL 版を GitHub Pages に公開する
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Build-WebGL
+          path: webgl
+
+      - name: Locate index.html
+        id: site
+        run: echo "dir=$(dirname "$(find webgl -name index.html | head -n 1)")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.site.outputs.dir }}
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # v* タグで GitHub Release に Windows 版と WebGL 版を添付する
+  release:
+    name: GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Build-*
+          path: dist
+
+      - name: Zip builds
+        run: |
+          cd dist
+          for d in Build-*; do (cd "$d" && zip -qr "../Wataame-${d#Build-}-${GITHUB_REF_NAME}.zip" .); done
+          ls -la
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
