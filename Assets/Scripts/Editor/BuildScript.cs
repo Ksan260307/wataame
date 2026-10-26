@@ -37,6 +37,20 @@ namespace Wataame.Editor
         [MenuItem("Wataame/Build/WebGL")]
         public static void BuildWebGLMenu() => BuildFor(BuildTarget.WebGL, "Builds/WebGL");
 
+        /// <summary>
+        /// GitHub Pages 公開用の WebGL ビルド。Publish/WebGL に出力し、これをコミットすると
+        /// Unity ライセンスの Secrets が無くても Actions が Pages に公開する。
+        /// </summary>
+        [MenuItem("Wataame/Build/WebGL (Publish to GitHub Pages)")]
+        public static void BuildWebGLForPages()
+        {
+            // 古いファイルが残らないように作り直す
+            if (Directory.Exists(PublishWebGLPath)) Directory.Delete(PublishWebGLPath, true);
+            BuildFor(BuildTarget.WebGL, PublishWebGLPath);
+        }
+
+        const string PublishWebGLPath = "Publish/WebGL";
+
         /// <summary>CI 用。-buildTarget / -customBuildTarget と -customBuildPath を読む。</summary>
         public static void Build()
         {

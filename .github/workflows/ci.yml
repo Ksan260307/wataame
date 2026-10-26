@@ -152,11 +152,14 @@ jobs:
           path: build/${{ matrix.targetPlatform }}
           if-no-files-found: error
 
-  # main へのプッシュで WebGL 版を GitHub Pages に公開する
+  # main へのプッシュで WebGL 版を GitHub Pages に公開する。
+  # Unity ライセンスがあれば CI でビルドしたもの、無ければリポジトリの Publish/WebGL (ローカルビルド) を使う
   deploy-pages:
     name: Deploy to GitHub Pages
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [secrets-check, build]
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      (needs.build.result == 'success' || needs.secrets-check.outputs.has-license != 'true')
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -165,20 +168,35 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v5
+        if: needs.secrets-check.outputs.has-license != 'true'
+
       - uses: actions/download-artifact@v4
+        if: needs.secrets-check.outputs.has-license == 'true'
         with:
           name: Build-WebGL
           path: webgl
 
       - name: Locate index.html
         id: site
-        run: echo "dir=$(dirname "$(find webgl -name index.html | head -n 1)")" >> "$GITHUB_OUTPUT"
+        run: |
+          index=$(find webgl Publish/WebGL -name index.html 2>/dev/null | head -n 1)
+          if [ -z "$index" ]; then
+            echo "::warning::公開する WebGL ビルドがありません。Unity のメニュー Wataame/Build/WebGL (Publish to GitHub Pages) でビルドして Publish/WebGL をコミットしてください"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "dir=$(dirname "$index")" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/configure-pages@v5
+        if: steps.site.outputs.found == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.site.outputs.found == 'true'
         with:
           path: ${{ steps.site.outputs.dir }}
       - id: deployment
+        if: steps.site.outputs.found == 'true'
         uses: actions/deploy-pages@v4
 
   # v* タグで GitHub Release に Windows 版と WebGL 版を添付する

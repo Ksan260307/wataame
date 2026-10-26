@@ -17,3 +17,6 @@
 *.ttf binary
 *.png binary
 *.blend binary
+
+# ローカルでビルドした WebGL (GitHub Pages 公開用)
+Publish/** binary linguist-generated
