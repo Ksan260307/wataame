@@ -17,6 +17,8 @@ namespace Wataame
         public int Stars;
         public string Name;
         public string Comment;
+        /// <summary>次に作るときのアドバイス。</summary>
+        public string Advice;
     }
 
     /// <summary>できあがったわたあめの形を評価して、名前とコメントをつける。</summary>
@@ -47,6 +49,7 @@ namespace Wataame
                 stats.Name = "ちいさな わたあめ";
                 stats.Comment = "もっと ざらめを まきとってみよう";
                 stats.Stars = 1;
+                stats.Advice = "スイッチを いれたら 棒を ボウルの 中へ";
                 return stats;
             }
 
@@ -101,7 +104,19 @@ namespace Wataame
             stats.Name = ColorName(gramsByColor) + "の" + shape;
             float score = 1f + Mathf.Clamp01(stats.Grams / 15f) * 2.2f + stats.Roundness * 1.4f + (shape == "くも" ? 0.4f : 0f);
             stats.Stars = Mathf.Clamp(Mathf.RoundToInt(score), 1, 5);
+            stats.Advice = Advise(stats);
             return stats;
+        }
+
+        /// <summary>形から、次に作るときのコツを 1 つ選ぶ。</summary>
+        public static string Advise(CandyStats stats)
+        {
+            if (stats.Grams < 4f) return "ざらめを ふやすか、ボウルの 中で ながく まきとろう";
+            if (stats.Offset > 0.3f) return "くるくる まわすと かたよらずに まるくなるよ";
+            if (stats.Elongation > 1.5f) return "棒を ふかく しずめすぎかも。すこし あげてみよう";
+            if (stats.Elongation < 0.6f) return "もうすこし 棒を しずめると 上下にも ふくらむよ";
+            if (stats.Roundness < 0.7f) return "「おまかせ」を つかうと きれいな まるに なりやすいよ";
+            return "じょうず！ いろを かえて しましまにも ちょうせん";
         }
 
         static string ColorName(float[] gramsByColor)

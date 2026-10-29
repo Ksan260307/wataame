@@ -35,7 +35,7 @@ namespace Wataame
         Transform head, switchLever, lamp;
         Quaternion switchRest;
         Material lampMaterial;
-        ParticleSystem floss, pour;
+        ParticleSystem floss, pour, sparkle;
         SoundFx sound;
         float pourRemaining;
         Color pourColor;
@@ -58,6 +58,7 @@ namespace Wataame
 
             floss = CreateFlossParticles();
             pour = CreatePourParticles();
+            sparkle = CreateSparkleParticles();
             CreateShadow();
         }
 
@@ -138,7 +139,15 @@ namespace Wataame
             if (!FlossPhysics.Aim(transform.position + GameConfig.HeadCenter, stick.position, stick.up,
                     Candy.ApproxRadius, Candy.Field.Size.y, out var shot))
                 return false;
-            return Candy.TryCatch(shot.Origin, shot.Direction, shot.MaxDistance, grams, color, colorIndex);
+            if (!Candy.TryCatch(shot.Origin, shot.Direction, shot.MaxDistance, grams, color, colorIndex, out Vector3 hit))
+                return false;
+            // 巻きついたところがときどきキラッと光る
+            if (Random.value < 0.08f)
+            {
+                var emit = new ParticleSystem.EmitParams { position = hit, startColor = Color.Lerp(color, Color.white, 0.6f), applyShapeToPosition = false };
+                sparkle.Emit(emit, 1);
+            }
+            return true;
         }
 
         void UpdateVisuals(float dt)
@@ -231,6 +240,35 @@ namespace Wataame
             var renderer = go.GetComponent<ParticleSystemRenderer>();
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
             renderer.sharedMaterial = WataameMaterials.Particle("SugarParticle");
+            ps.Play();
+            return ps;
+        }
+
+        ParticleSystem CreateSparkleParticles()
+        {
+            var go = new GameObject("SparkleParticles");
+            go.transform.SetParent(transform, false);
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = ps.main;
+            main.playOnAwake = false;
+            main.loop = true;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.25f, 0.45f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.02f, 0.08f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.006f, 0.012f);
+            main.gravityModifier = -0.02f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 300;
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+            var shape = ps.shape;
+            shape.enabled = false;
+            var size = ps.sizeOverLifetime;
+            size.enabled = true;
+            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 1f, 1f, 0f));
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sharedMaterial = WataameMaterials.Particle("SparkleParticle");
             ps.Play();
             return ps;
         }

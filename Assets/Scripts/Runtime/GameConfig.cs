@@ -46,6 +46,21 @@ namespace Wataame
         public const float SpinUpSeconds = 0.8f;
         public const float FlossRiseAboveRim = 0.08f;
 
+        /// <summary>軸からの距離 r でのボウル内側の底面の高さ。ボウルの外はテーブル (0)。</summary>
+        public static float BowlSurfaceY(float r)
+        {
+            if (r <= BowlProfile[0].x) return BowlBottomY;
+            for (int i = 1; i < BowlProfile.Length; i++)
+            {
+                if (r <= BowlProfile[i].x)
+                {
+                    float t = Mathf.InverseLerp(BowlProfile[i - 1].x, BowlProfile[i].x, r);
+                    return Mathf.Lerp(BowlProfile[i - 1].y, BowlProfile[i].y, t);
+                }
+            }
+            return r <= BowlRimRadius + 0.02f ? BowlRimY : 0f;
+        }
+
         /// <summary>高さ y でのボウル内側の半径。</summary>
         public static float BowlRadiusAt(float y)
         {

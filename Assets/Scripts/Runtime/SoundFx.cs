@@ -9,7 +9,7 @@ namespace Wataame
 
         AudioSource motor;
         AudioSource oneShot;
-        AudioClip click, pour, done;
+        AudioClip click, pour, done, bump;
 
         void Awake()
         {
@@ -23,6 +23,7 @@ namespace Wataame
             oneShot.playOnAwake = false;
 
             click = Synthesize("Click", 0.06f, t => Mathf.Sin(t * 2f * Mathf.PI * 1800f) * Mathf.Exp(-t * 90f));
+            bump = Synthesize("Bump", 0.08f, t => Mathf.Sin(t * 2f * Mathf.PI * (240f - t * 1500f)) * Mathf.Exp(-t * 45f) * 0.6f);
             pour = Synthesize("Pour", 0.6f, t => (Random.value * 2f - 1f) * 0.35f * Mathf.Sin(Mathf.PI * t / 0.6f) * (0.6f + 0.4f * Mathf.Sin(t * 90f)));
             done = Synthesize("Done", 0.7f, t =>
             {
@@ -44,6 +45,7 @@ namespace Wataame
         public void PlayClick() => oneShot.PlayOneShot(click, 0.6f);
         public void PlayPour() => oneShot.PlayOneShot(pour, 0.5f);
         public void PlayDone() => oneShot.PlayOneShot(done, 0.6f);
+        public void PlayBump() => oneShot.PlayOneShot(bump, 0.5f);
 
         static float MotorWave(float t)
         {

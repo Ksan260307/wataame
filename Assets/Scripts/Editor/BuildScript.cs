@@ -96,6 +96,8 @@ namespace Wataame.Editor
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
             // GitHub Pages は Content-Encoding を付けないので、ブラウザ側で展開できるようにする
             PlayerSettings.WebGL.decompressionFallback = true;
+            // 画面いっぱいに表示し、スマホのタッチ操作に合わせたテンプレート (Assets/WebGLTemplates/Wataame)
+            PlayerSettings.WebGL.template = "PROJECT:Wataame";
         }
 
         static string DefaultPath(BuildTarget target)

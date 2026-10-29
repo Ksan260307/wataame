@@ -9,8 +9,10 @@ namespace Wataame
     /// </summary>
     public sealed class CottonCandy : MonoBehaviour
     {
-        const int ShellCount = 14;
-        const float RemeshInterval = 0.06f;
+        // スマホ・タブレットでは描画とメッシュ更新を軽くする
+        static readonly bool LowPower = Application.isMobilePlatform;
+        static readonly int ShellCount = LowPower ? 8 : 14;
+        static readonly float RemeshInterval = LowPower ? 0.1f : 0.06f;
 
         public CandyField Field { get; private set; }
         public float[] GramsByColor { get; } = new float[CandyPalette.Count];
@@ -57,8 +59,9 @@ namespace Wataame
         /// <summary>
         /// ワールド座標の糸 (レイ) を受け止める。表面か棒に当たればそこに積もらせて true を返す。
         /// </summary>
-        public bool TryCatch(Vector3 worldOrigin, Vector3 worldDirection, float maxDistance, float grams, Color color, int colorIndex)
+        public bool TryCatch(Vector3 worldOrigin, Vector3 worldDirection, float maxDistance, float grams, Color color, int colorIndex, out Vector3 worldHit)
         {
+            worldHit = default;
             Vector3 origin = transform.InverseTransformPoint(worldOrigin);
             Vector3 direction = transform.InverseTransformDirection(worldDirection);
             if (!Field.Trace(origin, direction, maxDistance, out Vector3 hit)) return false;
@@ -67,6 +70,7 @@ namespace Wataame
             hit += Random.insideUnitSphere * (Field.Cell * 0.6f);
             Field.Deposit(hit, grams, color);
             if (colorIndex >= 0) GramsByColor[colorIndex] += grams;
+            worldHit = transform.TransformPoint(hit);
             return true;
         }
 

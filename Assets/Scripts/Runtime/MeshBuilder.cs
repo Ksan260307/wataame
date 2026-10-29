@@ -49,6 +49,40 @@ namespace Wataame
             return Lathe(name, profile, segments);
         }
 
+        /// <summary>XZ 平面のリング。UV の y が内側 0 → 外側 1 (帯の両端を薄くする用)。</summary>
+        public static Mesh Annulus(string name, float inner, float outer, int segments = 64)
+        {
+            var vertices = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var colors = new List<Color>();
+            var triangles = new List<int>();
+            for (int s = 0; s <= segments; s++)
+            {
+                float a = 2f * Mathf.PI * s / segments;
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                vertices.Add(dir * inner);
+                vertices.Add(dir * outer);
+                uvs.Add(new Vector2((float)s / segments, 0f));
+                uvs.Add(new Vector2((float)s / segments, 1f));
+                colors.Add(Color.white);
+                colors.Add(Color.white);
+            }
+            for (int s = 0; s < segments; s++)
+            {
+                int i = s * 2;
+                triangles.Add(i); triangles.Add(i + 2); triangles.Add(i + 1);
+                triangles.Add(i + 1); triangles.Add(i + 2); triangles.Add(i + 3);
+            }
+            var mesh = new Mesh { name = name };
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetColors(colors);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         /// <summary>XZ 平面の正方形 (影など)。UV は 0..1。</summary>
         public static Mesh Quad(string name, float size)
         {

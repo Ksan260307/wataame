@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#ffdde8">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(#cfe4ff, #ffe0ea);
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+    }
+    #unity-canvas {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: block;
+      outline: none;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      font-family: "Hiragino Maru Gothic ProN", "M PLUS Rounded 1c", "Yu Gothic", sans-serif;
+      color: #ff6f9c;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    #loading h1 {
+      margin: 0;
+      font-size: clamp(28px, 8vw, 44px);
+      text-shadow: 2px 2px 0 #fff;
+    }
+    #bar {
+      width: min(70vw, 340px);
+      height: 14px;
+      border-radius: 7px;
+      background: #fff;
+      overflow: hidden;
+    }
+    #fill {
+      width: 0;
+      height: 100%;
+      border-radius: 7px;
+      background: #ff8fb3;
+      transition: width 0.2s;
+    }
+    #message {
+      color: #7a5568;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="loading">
+    <h1>わたあめメーカー</h1>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="message">よみこみ中…</div>
+  </div>
+  <script src="Build/{{{ LOADER_FILENAME }}}"></script>
+  <script>
+    (function () {
+      var canvas = document.getElementById("unity-canvas");
+      var loading = document.getElementById("loading");
+      var fill = document.getElementById("fill");
+      var message = document.getElementById("message");
+      var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+        (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+
+      // ページのスクロール・ピンチ拡大・右クリックメニューを止めて、操作をゲームに渡す
+      ["touchstart", "touchmove", "touchend"].forEach(function (type) {
+        canvas.addEventListener(type, function (e) { e.preventDefault(); }, { passive: false });
+      });
+      document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+      canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+      var config = {
+        dataUrl: "Build/{{{ DATA_FILENAME }}}",
+        frameworkUrl: "Build/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+        workerUrl: "Build/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+        codeUrl: "Build/{{{ CODE_FILENAME }}}",
+#endif
+#if MEMORY_FILENAME
+        memoryUrl: "Build/{{{ MEMORY_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: "Build/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        // 高解像度のスマホでは描画の負荷を抑える
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2),
+      };
+
+      createUnityInstance(canvas, config, function (progress) {
+        fill.style.width = Math.round(progress * 100) + "%";
+      }).then(function () {
+        loading.style.display = "none";
+        canvas.focus();
+      }).catch(function (error) {
+        message.textContent = "よみこめませんでした: " + error;
+      });
+    })();
+  </script>
+</body>
+</html>

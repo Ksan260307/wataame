@@ -192,27 +192,90 @@ namespace Wataame.Tests
 
     public class StickConstraintTests
     {
+        static Vector3 Constrain(Vector3 p, Vector3 previous, float candyRadius = 0.0055f)
+            => StickController.Constrain(p, previous, candyRadius, out _);
+
         [Test]
         public void CannotPassThroughBowlWall()
         {
             var inside = new Vector3(0.2f, 0.3f, 0f);
-            var p = StickController.Constrain(new Vector3(0.5f, 0.3f, 0f), inside);
+            var p = StickController.Constrain(new Vector3(0.3f, 0.3f, 0f), inside, 0.0055f, out var contact);
             Assert.LessOrEqual(new Vector2(p.x, p.z).magnitude, GameConfig.BowlRadiusAt(0.3f));
+            Assert.IsTrue(contact.Wall);
+        }
+
+        [Test]
+        public void PullingFarOutsideLiftsOverRim()
+        {
+            var inside = new Vector3(0.2f, 0.3f, 0f);
+            var p = Constrain(new Vector3(0.5f, 0.3f, 0f), inside);
+            Assert.Greater(p.y, GameConfig.BowlRimY);
+            Assert.AreEqual(0.5f, p.x, 1e-4f);
         }
 
         [Test]
         public void LoweringFromOutsideStopsAtRim()
         {
             var outside = new Vector3(0.5f, 0.5f, 0f);
-            var p = StickController.Constrain(new Vector3(0.5f, 0.3f, 0f), outside);
+            var p = StickController.Constrain(new Vector3(0.5f, 0.3f, 0f), outside, 0.0055f, out var contact);
             Assert.AreEqual(GameConfig.BowlRimY, p.y, 1e-4f);
+            Assert.IsTrue(contact.BlockedAtRim);
         }
 
         [Test]
         public void KeepsAwayFromHead()
         {
-            var p = StickController.Constrain(new Vector3(0.01f, 0.24f, 0f), new Vector3(0.1f, 0.24f, 0f));
+            var p = StickController.Constrain(new Vector3(0.01f, 0.24f, 0f), new Vector3(0.1f, 0.24f, 0f), 0.0055f, out var contact);
             Assert.GreaterOrEqual(new Vector2(p.x, p.z).magnitude, GameConfig.HeadRadius);
+            Assert.IsTrue(contact.Head);
+        }
+
+        [Test]
+        public void BigCandyStaysFurtherFromWall()
+        {
+            var inside = new Vector3(0.2f, 0.3f, 0f);
+            var small = Constrain(new Vector3(0.27f, 0.3f, 0f), inside, 0.01f);
+            var big = Constrain(new Vector3(0.27f, 0.3f, 0f), inside, 0.1f);
+            Assert.Less(big.x, small.x);
+        }
+
+        [Test]
+        public void BottomIsReported()
+        {
+            StickController.Constrain(new Vector3(0.15f, 0.1f, 0f), new Vector3(0.15f, 0.25f, 0f), 0.0055f, out var contact);
+            Assert.IsTrue(contact.Bottom);
+        }
+
+        [Test]
+        public void ZonesAreClassified()
+        {
+            Assert.AreEqual(StickController.Zone.Outside, StickController.Classify(new Vector3(0.2f, 0.6f, 0f)));
+            Assert.AreEqual(StickController.Zone.Best, StickController.Classify(new Vector3(0.17f, 0.27f, 0f)));
+            Assert.AreEqual(StickController.Zone.TooClose, StickController.Classify(new Vector3(0.08f, 0.27f, 0f)));
+            Assert.AreEqual(StickController.Zone.Shallow, StickController.Classify(new Vector3(0.17f, 0.37f, 0f)));
+        }
+
+        [Test]
+        public void BowlSurfaceFollowsProfile()
+        {
+            Assert.AreEqual(GameConfig.BowlBottomY, GameConfig.BowlSurfaceY(0.05f), 1e-4f);
+            Assert.Greater(GameConfig.BowlSurfaceY(0.27f), GameConfig.BowlSurfaceY(0.2f));
+            Assert.AreEqual(0f, GameConfig.BowlSurfaceY(0.5f), 1e-4f);
+        }
+    }
+
+    public class AdviceTests
+    {
+        [Test]
+        public void SmallCandyAsksForMoreSugar()
+        {
+            StringAssert.Contains("ざらめ", CandyEvaluator.Advise(new CandyStats { Grams = 2f, Roundness = 0.9f, Elongation = 1f }));
+        }
+
+        [Test]
+        public void LopsidedCandyAsksToSpin()
+        {
+            StringAssert.Contains("くるくる", CandyEvaluator.Advise(new CandyStats { Grams = 10f, Offset = 0.5f, Roundness = 0.4f, Elongation = 1f }));
         }
     }
 }
